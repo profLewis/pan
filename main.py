@@ -26,6 +26,7 @@ import time
 from sdcard import SDCard
 from audio import play_wav, get_volume, set_volume
 from sensor import HitSensor
+from melody import play_tetris
 
 
 # --- SD card pin config (SPI1 on the Pico Expansion Mini) ---
@@ -265,7 +266,11 @@ def main():
 
     print("Found {} WAV file(s).".format(len(wavs)))
 
-    # 4. Interactive loop
+    # 4. Startup jingle
+    print()
+    play_tetris(MOUNT)
+
+    # 5. Interactive loop
     show_list(wavs)
 
     while True:
