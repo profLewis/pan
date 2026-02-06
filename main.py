@@ -1,6 +1,7 @@
 """
 WAV file browser & player for SEENGREAT Pico Expansion Mini Rev 2.1
-Reads the SD card, lists available WAV files, and plays them on demand.
+Reads the SD card, lists available WAV files, plays them on demand,
+and monitors a hit sensor on GP2 for triggered playback.
 
 SD card wiring (SPI1):
     SCK  -> GP10
@@ -8,18 +9,23 @@ SD card wiring (SPI1):
     MISO -> GP12
     CS   -> GP13
 
-Audio output (PWM):
-    Left  -> GP18
-    Right -> GP19  (3.5mm jack)
+Audio output (PWM -> buzzer + 3.5mm jack):
+    Left  -> GP18  (buzzer + left channel)
+    Right -> GP19  (right channel)
+
+Sensor input:
+    D0    -> GP2   (second Grove, 10K pull-down to GND)
 """
 
 import machine
 import os
 import struct
 import json
+import time
 
 from sdcard import SDCard
 from audio import play_wav, get_volume, set_volume
+from sensor import HitSensor
 
 
 # --- SD card pin config (SPI1 on the Pico Expansion Mini) ---
@@ -29,6 +35,10 @@ PIN_MOSI = 11
 PIN_MISO = 12
 PIN_CS   = 13
 MOUNT    = "/sd"
+
+# --- Sensor defaults ---
+SENSOR_PIN    = 2
+COOLDOWN_MS   = 2000
 
 
 def mount_sd():
@@ -120,26 +130,22 @@ def find_wav_files(base):
 
 
 def load_config(path):
-    """Try to load a JSON config file from the SD card."""
-    for name in ("config.json", "config.txt", "CONFIG.JSON", "CONFIG.TXT"):
+    """Load config.json from the SD card. Returns a dict (empty on failure)."""
+    for name in ("config.json", "CONFIG.JSON"):
         try:
             full = path + "/" + name
             with open(full, "r") as f:
                 data = f.read()
             print("Config found:", full)
-            try:
-                cfg = json.loads(data)
-                return cfg
-            except ValueError:
-                # not valid JSON - just print raw contents
-                print("--- config contents ---")
-                print(data)
-                print("-----------------------")
-                return data
-        except OSError:
+            cfg = json.loads(data)
+            print("  hit_wav:     {}".format(cfg.get("hit_wav", "(not set)")))
+            print("  volume:      {}".format(cfg.get("volume", "(default)")))
+            print("  cooldown_ms: {}".format(cfg.get("cooldown_ms", "(default)")))
+            return cfg
+        except (OSError, ValueError):
             continue
-    print("No config file found on SD card.")
-    return None
+    print("No config.json found on SD card.")
+    return {}
 
 
 def show_list(wavs):
@@ -172,6 +178,59 @@ def show_list(wavs):
     print()
 
 
+def resolve_hit_wav(cfg, wavs):
+    """Find the WAV path for the hit sound from config. Returns (path, name) or None."""
+    hit_name = cfg.get("hit_wav")
+    if not hit_name:
+        return None
+
+    # try exact match under mount root
+    full = MOUNT + "/" + hit_name
+    for w in wavs:
+        if w == full or w.endswith("/" + hit_name):
+            return w, hit_name
+
+    print("  WARNING: hit_wav '{}' not found on SD card.".format(hit_name))
+    return None
+
+
+def sensor_mode(cfg, wavs):
+    """Monitor GP2 sensor and play the config-specified WAV on each hit."""
+    result = resolve_hit_wav(cfg, wavs)
+    if result is None:
+        print("  No hit_wav configured. Set \"hit_wav\" in config.json")
+        print("  to the filename of a WAV on the SD card.")
+        show_list(wavs)
+        return
+
+    wav_path, display = result
+    cooldown = cfg.get("cooldown_ms", COOLDOWN_MS)
+    sensor = HitSensor(pin=SENSOR_PIN, cooldown_ms=cooldown)
+
+    print()
+    print("-" * 44)
+    print("  SENSOR MODE")
+    print("  WAV:      {}".format(display))
+    print("  Volume:   {}/10".format(get_volume()))
+    print("  Cooldown: {}ms".format(cooldown))
+    print("  Sensor:   GP{}".format(SENSOR_PIN))
+    print("-" * 44)
+    print("  Waiting for hits... Ctrl+C to exit.")
+    print()
+
+    try:
+        while True:
+            if sensor.check():
+                print("  * HIT #{} - playing {}".format(sensor.count, display))
+                play_wav(wav_path)
+            time.sleep_ms(10)
+    except KeyboardInterrupt:
+        print()
+        print()
+        print("  Exited sensor mode. {} hit(s) registered.".format(sensor.count))
+        print()
+
+
 def main():
     print()
     print("=" * 44)
@@ -190,6 +249,11 @@ def main():
     print()
     cfg = load_config(MOUNT)
 
+    # Apply config values
+    if isinstance(cfg, dict):
+        if "volume" in cfg:
+            set_volume(cfg["volume"])
+
     # 3. Scan for WAV files
     print()
     print("Scanning for WAV files...")
@@ -201,14 +265,14 @@ def main():
 
     print("Found {} WAV file(s).".format(len(wavs)))
 
-    # 4. Interactive playback loop
+    # 4. Interactive loop
     show_list(wavs)
 
     while True:
         vol = get_volume()
         vol_bar = "#" * vol + "." * (10 - vol)
         print("[vol {}/10 {}]".format(vol, vol_bar))
-        print("Enter: number to play, +/- volume, 'l' list, 'q' quit")
+        print("Enter: number, +/- vol, 's' sensor, 'l' list, 'q' quit")
         try:
             choice = input("> ").strip()
         except (EOFError, KeyboardInterrupt):
@@ -225,6 +289,10 @@ def main():
 
         if ch == "l":
             show_list(wavs)
+            continue
+
+        if ch == "s":
+            sensor_mode(cfg, wavs)
             continue
 
         if ch == "+":
@@ -246,7 +314,7 @@ def main():
                 print("  Usage: v0 .. v10")
             continue
 
-        # try to parse as a number
+        # try to parse as a file number
         try:
             num = int(choice)
         except ValueError:
