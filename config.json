@@ -1,5 +1,6 @@
 {
     "hit_wav": "hit.wav",
     "volume": 7,
-    "cooldown_ms": 2000
+    "cooldown_ms": 2000,
+    "sensor": "mpr121"
 }

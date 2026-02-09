@@ -17,9 +17,15 @@ import time
 
 from audio_player import AudioPlayer
 from melody import play_tetris
-from sensor import HitSensor
+from sensor import HitSensor, MPR121Sensor
 
 MOUNT = "/sd"
+
+# Default chromatic note mapping for MPR121 channels 0-11 (A4 through G#5)
+DEFAULT_NOTES = [
+    "A4", "As4", "B4", "C5", "Cs5", "D5",
+    "Ds5", "E5", "F5", "Fs5", "G5", "Gs5",
+]
 
 
 def mount_sd():
@@ -36,6 +42,7 @@ def load_config():
             with open(MOUNT + "/" + name, "r") as f:
                 cfg = json.loads(f.read())
             print("Config found:", name)
+            print("  sensor:      {}".format(cfg.get("sensor", "digital")))
             print("  hit_wav:     {}".format(cfg.get("hit_wav", "(not set)")))
             print("  volume:      {}".format(cfg.get("volume", "(default)")))
             print("  cooldown_ms: {}".format(cfg.get("cooldown_ms", "(default)")))
@@ -87,20 +94,52 @@ def resolve_hit_wav(cfg, wavs):
 
 
 def sensor_mode(cfg, wavs, player):
-    result = resolve_hit_wav(cfg, wavs)
-    if result is None:
-        print("  Set \"hit_wav\" in config.json to a WAV filename.")
-        show_list(wavs)
-        return
-
-    wav_path, display = result
+    sensor_type = cfg.get("sensor", "digital")
     cooldown = cfg.get("cooldown_ms", 2000)
-    sensor = HitSensor(cooldown_ms=cooldown)
+    use_mpr121 = sensor_type == "mpr121"
 
+    # Build channel -> WAV path mapping
+    channel_wav = {}
+
+    if use_mpr121:
+        custom = cfg.get("mpr121_channels", {})
+        for ch in range(12):
+            ch_str = str(ch)
+            if ch_str in custom:
+                wav_name = custom[ch_str]
+            else:
+                wav_name = DEFAULT_NOTES[ch] + ".wav"
+            # Find WAV on SD card
+            for w in wavs:
+                if w.endswith("/" + wav_name) or w == MOUNT + "/" + wav_name:
+                    channel_wav[ch] = w
+                    break
+        if not channel_wav:
+            print("  No WAV files matched for MPR121 channels.")
+            return
+        sensor = MPR121Sensor(cooldown_ms=cooldown)
+    else:
+        result = resolve_hit_wav(cfg, wavs)
+        if result is None:
+            print("  Set \"hit_wav\" in config.json to a WAV filename.")
+            show_list(wavs)
+            return
+        wav_path, display = result
+        channel_wav[0] = wav_path
+        sensor = HitSensor(cooldown_ms=cooldown)
+
+    # Status banner
     print()
     print("-" * 44)
     print("  SENSOR MODE (polyphonic)")
-    print("  WAV:      {}".format(display))
+    print("  Sensor:   {}".format(sensor_type))
+    if use_mpr121:
+        print("  Channels: {} mapped".format(len(channel_wav)))
+        for ch in sorted(channel_wav):
+            name = channel_wav[ch][len(MOUNT) + 1:]
+            print("    ch {:>2} -> {}".format(ch, name))
+    else:
+        print("  WAV:      {}".format(display))
     print("  Volume:   {}/10".format(player.volume_int()))
     print("  Cooldown: {}ms".format(cooldown))
     print("  Voices:   {} available".format(4))
@@ -110,10 +149,13 @@ def sensor_mode(cfg, wavs, player):
 
     try:
         while True:
-            if sensor.check():
-                v = player.play_wav(wav_path)
-                print("  * HIT #{} (voice {}) - {}".format(
-                    sensor.count, v, display))
+            channels = sensor.check()
+            for ch in channels:
+                if ch in channel_wav:
+                    v = player.play_wav(channel_wav[ch])
+                    name = channel_wav[ch][len(MOUNT) + 1:]
+                    print("  * HIT #{} ch{} (voice {}) - {}".format(
+                        sensor.count, ch, v, name))
             time.sleep(0.01)
     except KeyboardInterrupt:
         print()
