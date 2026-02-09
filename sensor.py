@@ -42,7 +42,7 @@ class HitSensor:
 
 
 class MPR121Sensor:
-    def __init__(self, sda=board.GP5, scl=board.GP4, address=0x5A,
+    def __init__(self, sda=board.GP4, scl=board.GP5, address=0x5A,
                  cooldown_ms=200):
         import busio
         import adafruit_mpr121

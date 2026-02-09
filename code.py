@@ -29,6 +29,10 @@ DEFAULT_NOTES = [
 
 
 def mount_sd():
+    try:
+        os.mkdir(MOUNT)
+    except OSError:
+        pass  # already exists
     spi = busio.SPI(board.GP10, MOSI=board.GP11, MISO=board.GP12)
     sd = sdcardio.SDCard(spi, board.GP15)
     vfs = storage.VfsFat(sd)
