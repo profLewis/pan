@@ -217,7 +217,24 @@ def main():
         else:
             print("Found {} WAV file(s).".format(len(wavs)))
 
-    # 6. Interactive loop
+    # 6. Auto-enter sensor mode if MPR121 detected
+    if cfg.get("sensor") == "mpr121" and wavs:
+        try:
+            import busio as _i2c_bus
+            _i2c = _i2c_bus.I2C(board.GP5, board.GP4)
+            while not _i2c.try_lock():
+                pass
+            _found = 0x5A in _i2c.scan()
+            _i2c.unlock()
+            _i2c.deinit()
+            if _found:
+                print()
+                print("  MPR121 detected — auto-entering sensor mode.")
+                sensor_mode(cfg, wavs, player)
+        except Exception as e:
+            print("  MPR121 probe failed: {}".format(e))
+
+    # 7. Interactive loop
     if wavs:
         show_list(wavs)
 
