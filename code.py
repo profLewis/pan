@@ -16,7 +16,7 @@ import json
 import time
 
 from audio_player import AudioPlayer
-from melody import play_tetris
+from melody import play_tetris, play_in_the_mood
 from sensor import HitSensor, MPR121Sensor
 
 MOUNT = "/sd"
@@ -188,9 +188,15 @@ def main():
     except Exception as e:
         print("WARNING: Could not mount SD card:", e)
 
-    # 3. Startup jingle (WAV samples if SD ok, synthio fallback)
+    # 3. Startup jingle — alternate between Tetris and In the Mood
+    import microcontroller
+    boot_count = microcontroller.nvm[0]
+    microcontroller.nvm[0] = (boot_count + 1) % 256
     print()
-    play_tetris(player, MOUNT if sd_ok else None)
+    if boot_count % 2 == 0:
+        play_tetris(player, MOUNT if sd_ok else None)
+    else:
+        play_in_the_mood(player, MOUNT if sd_ok else None)
 
     # 4. Load config
     cfg = {}
