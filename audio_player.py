@@ -3,13 +3,12 @@ Polyphonic audio player for SEENGREAT Pico Expansion Mini Rev 2.1.
 Uses CircuitPython audiomixer for real-time mixing of multiple WAV
 files with per-voice volume control.
 
-Audio output (PWM via PIO):
-    Left  -> GP18  (buzzer + 3.5mm left)
-    Right -> GP19  (3.5mm right)
+Audio outputs:
+    PWM:  GP18 (buzzer + 3.5mm left), GP19 (3.5mm right)
+    I2S:  Waveshare Pico Audio — DIN=GP22, SCLK=GP28, LRCK=GP27
 """
 
 import board
-import audiopwmio
 import audiomixer
 import audiocore
 
@@ -17,10 +16,8 @@ NUM_VOICES = 4
 
 
 class AudioPlayer:
-    def __init__(self, sample_rate=44100):
-        self._out = audiopwmio.PWMAudioOut(
-            board.GP18, right_channel=board.GP19
-        )
+    def __init__(self, sample_rate=44100, output="auto"):
+        self._output = self._init_output(output)
         self._mixer = audiomixer.Mixer(
             voice_count=NUM_VOICES,
             sample_rate=sample_rate,
@@ -31,6 +28,38 @@ class AudioPlayer:
         self._out.play(self._mixer)
         self._vol = 1.5
         self._files = [None] * NUM_VOICES
+
+    @property
+    def output(self):
+        return self._output
+
+    def _init_output(self, output):
+        if output in ("auto", "i2s"):
+            try:
+                import audiobusio
+                self._out = audiobusio.I2SOut(
+                    bit_clock=board.GP27,
+                    word_select=board.GP28,
+                    data=board.GP26,
+                )
+                return "i2s"
+            except Exception:
+                if output == "i2s":
+                    raise
+                # auto: fall through to buzzer
+
+        import audiopwmio
+        if output == "jack":
+            self._out = audiopwmio.PWMAudioOut(board.GP19)
+            return "jack"
+        elif output == "both":
+            self._out = audiopwmio.PWMAudioOut(
+                board.GP18, right_channel=board.GP19
+            )
+            return "both"
+        else:  # "buzzer" or auto fallback
+            self._out = audiopwmio.PWMAudioOut(board.GP18)
+            return "buzzer"
 
     # ---- volume (0.0 – 2.0) ----
 

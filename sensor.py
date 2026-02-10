@@ -1,10 +1,9 @@
 """
-Sensor drivers for WAV-trigger input.
+Sensor driver for WAV-trigger input.
 
-HitSensor     — digital hit sensor on GP2 (Grove connector, 10K pull-down)
-MPR121Sensor  — 12-channel capacitive touch via I2C (SDA=GP5, SCL=GP4)
+HitSensor — digital hit sensor on GP2 (Grove connector, 10K pull-down)
 
-Both expose the same API:
+API:
     check()  -> list of channel IDs that just triggered (empty = no hits)
     count    — total hit count
     deinit() — cleanup
@@ -39,41 +38,3 @@ class HitSensor:
 
     def deinit(self):
         self.dio.deinit()
-
-
-class MPR121Sensor:
-    def __init__(self, sda=board.GP4, scl=board.GP5, address=0x5A,
-                 cooldown_ms=200):
-        import busio
-        import adafruit_mpr121
-
-        self._i2c = busio.I2C(scl, sda)
-        self._mpr = adafruit_mpr121.MPR121(self._i2c, address=address)
-        self.cooldown = cooldown_ms
-        self._prev_touched = 0
-        self._last_trigger = [0] * 12
-        self.count = 0
-
-    def check(self):
-        """Return list of channel numbers with new touches (rising edges)."""
-        cur = self._mpr.touched()
-        now = time.monotonic_ns() // 1_000_000
-        triggered = []
-        for ch in range(12):
-            bit = 1 << ch
-            # Rising edge: not previously touched, now touched
-            if (cur & bit) and not (self._prev_touched & bit):
-                if now - self._last_trigger[ch] >= self.cooldown:
-                    self._last_trigger[ch] = now
-                    self.count += 1
-                    triggered.append(ch)
-        self._prev_touched = cur
-        return triggered
-
-    def reset(self):
-        self.count = 0
-        self._prev_touched = 0
-        self._last_trigger = [0] * 12
-
-    def deinit(self):
-        self._i2c.deinit()

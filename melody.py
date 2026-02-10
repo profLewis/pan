@@ -35,32 +35,38 @@ TETRIS_THEME = [
     ("A4", _Q),
 ]
 
-# In the Mood (Glenn Miller) — main sax riff
-# Swung eighths: long-short pairs use _E + _S
+# In the Mood (Glenn Miller, 1939) — opening sax riff
+# Swing shuffle at ~160 BPM. The riff is built on the A-C-E arpeggio.
+# Rhythm: swing pairs (long-short) climbing up, then a held note.
+_SL = 250   # swing long
+_SS = 150   # swing short
+
 IN_THE_MOOD = [
-    # Opening riff (rising pattern on A)
-    ("A4", _E), ("A4", _S), ("C5", _S),
-    ("E5", _E), ("E5", _S), ("E5", _E),
-    ("G5", _E), ("E5", _E), ("C5", _E),
-    ("A4", _Q),
+    # Bar 1: A-C-E climbing riff (the iconic opening)
+    ("A4", _SL), ("C5", _SS), ("E5", _SL), ("C5", _SS),
+    ("E5", _SL), ("E5", _SS), ("E5", _Q),
     (None, _E),
-    # Repeat riff
-    ("A4", _E), ("A4", _S), ("C5", _S),
-    ("E5", _E), ("E5", _S), ("E5", _E),
-    ("G5", _E), ("E5", _E), ("C5", _E),
-    ("A4", _Q),
+    # Bar 2: repeat the riff
+    ("A4", _SL), ("C5", _SS), ("E5", _SL), ("C5", _SS),
+    ("E5", _SL), ("E5", _SS), ("E5", _Q),
     (None, _E),
-    # Rising pattern on C
-    ("C5", _E), ("C5", _S), ("E5", _S),
-    ("G5", _E), ("G5", _S), ("G5", _E),
-    ("A5", _E), ("G5", _E), ("E5", _E),
-    ("C5", _Q),
+    # Bar 3: same riff, resolve up to G
+    ("A4", _SL), ("C5", _SS), ("E5", _SL), ("C5", _SS),
+    ("E5", _SL), ("G5", _SS), ("G5", _Q),
     (None, _E),
-    # Descending finish
-    ("A5", _E), ("G5", _E), ("E5", _E), ("C5", _E),
-    ("A4", _E), ("C5", _E), ("E5", _Q),
+    # Bar 4: down and resolve
+    ("G5", _SL), ("E5", _SS), ("C5", _SL), ("A4", _SS),
+    ("A4", _DQ),
+    (None, _Q),
+    # Bar 5-6: second phrase — up to the high A
+    ("A4", _SL), ("C5", _SS), ("E5", _SL), ("G5", _SS),
+    ("A5", _Q), ("G5", _E),
+    ("E5", _SL), ("C5", _SS), ("A4", _Q),
     (None, _E),
-    ("E5", _Q), ("E5", _Q),
+    # Ending: quick ascending run + final hit
+    ("A4", _S), ("B4", _S), ("C5", _S), ("E5", _S),
+    ("G5", _E), ("A5", _Q),
+    (None, _E),
 ]
 
 # Note frequencies for synthio fallback
@@ -72,34 +78,37 @@ FREQ = {
 }
 
 
-def play_melody(player, melody, label, sd_mount="/sd"):
+def play_melody(player, melody, label, sd_mount="/sd", lcd=None):
     """Play a melody using WAV samples if available, else synthio."""
     if sd_mount is not None:
         try:
-            _play_wav(player, melody, label, sd_mount)
+            _play_wav(player, melody, label, sd_mount, lcd)
             return
         except OSError:
             pass
-    _play_synth(player, melody, label)
+    _play_synth(player, melody, label, lcd)
 
 
-def play_tetris(player, sd_mount="/sd"):
+def play_tetris(player, sd_mount="/sd", lcd=None):
     """Play Tetris using WAV samples if available, else synthio."""
-    play_melody(player, TETRIS_THEME, "Tetris", sd_mount)
+    play_melody(player, TETRIS_THEME, "Tetris", sd_mount, lcd)
 
 
-def play_in_the_mood(player, sd_mount="/sd"):
+def play_in_the_mood(player, sd_mount="/sd", lcd=None):
     """Play In the Mood using WAV samples if available, else synthio."""
-    play_melody(player, IN_THE_MOOD, "In the Mood", sd_mount)
+    play_melody(player, IN_THE_MOOD, "In the Mood", sd_mount, lcd)
 
 
-def _play_wav(player, melody, label, sd_mount):
+def _play_wav(player, melody, label, sd_mount, lcd=None):
     """Play melody using WAV note samples from SD card."""
     print("  Playing {} (WAV samples)...".format(label))
+    if lcd:
+        lcd.print(label, 0)
 
     voice = player.mixer.voice[0]
     voice.level = player.volume
     cur_file = None
+    notes_shown = ""
 
     try:
         for name, ms in melody:
@@ -111,6 +120,8 @@ def _play_wav(player, melody, label, sd_mount):
             if name is None:
                 time.sleep(ms / 1000)
             else:
+                if lcd:
+                    notes_shown = _scroll_note(lcd, notes_shown, name)
                 path = "{}/{}.wav".format(sd_mount, name)
                 cur_file = open(path, "rb")
                 wav = audiocore.WaveFile(cur_file)
@@ -125,11 +136,26 @@ def _play_wav(player, melody, label, sd_mount):
     print("  Done.")
 
 
-def _play_synth(player, melody, label):
+def _scroll_note(lcd, notes_shown, name):
+    """Append note name to scrolling LCD line 2."""
+    if notes_shown:
+        notes_shown += " " + name
+    else:
+        notes_shown = name
+    # Show rightmost 16 chars
+    if len(notes_shown) > 16:
+        notes_shown = notes_shown[len(notes_shown) - 16:]
+    lcd.print(notes_shown, 1)
+    return notes_shown
+
+
+def _play_synth(player, melody, label, lcd=None):
     """Fallback: play melody using synthio (no SD card needed)."""
     import synthio
 
     print("  Playing {} (synth fallback)...".format(label))
+    if lcd:
+        lcd.print(label, 0)
 
     synth = synthio.Synthesizer(sample_rate=player.mixer.sample_rate)
     envelope = synthio.Envelope(
@@ -144,6 +170,7 @@ def _play_synth(player, melody, label):
     voice.play(synth)
 
     prev_note = None
+    notes_shown = ""
     try:
         for name, ms in melody:
             if prev_note is not None:
@@ -153,6 +180,8 @@ def _play_synth(player, melody, label):
             if name is None:
                 time.sleep(ms / 1000)
             else:
+                if lcd:
+                    notes_shown = _scroll_note(lcd, notes_shown, name)
                 note = synthio.Note(
                     frequency=FREQ[name],
                     envelope=envelope,
