@@ -44,23 +44,52 @@ FREQ = {
 }
 
 
-def play_melody(player, melody, label, sd_mount="/sd", lcd=None):
+def play_melody(player, melody, label, sd_mount="/sd", lcd=None, speed=1.0,
+                pixel=None):
     """Play a melody using WAV samples if available, else synthio."""
+    if speed != 1.0:
+        melody = [(n, int(ms / speed)) for n, ms in melody]
     if sd_mount is not None:
         try:
-            _play_wav(player, melody, label, sd_mount, lcd)
+            _play_wav(player, melody, label, sd_mount, lcd, pixel)
             return
         except OSError:
             pass
-    _play_synth(player, melody, label, lcd)
+    _play_synth(player, melody, label, lcd, pixel)
 
 
-def play_tetris(player, sd_mount="/sd", lcd=None):
+def play_tetris(player, sd_mount="/sd", lcd=None, speed=1.0, pixel=None):
     """Play Tetris using WAV samples if available, else synthio."""
-    play_melody(player, TETRIS_THEME, "Tetris", sd_mount, lcd)
+    play_melody(player, TETRIS_THEME, "Tetris", sd_mount, lcd, speed=speed,
+                pixel=pixel)
 
 
-def _play_wav(player, melody, label, sd_mount, lcd=None):
+def _hsv_to_rgb(h, s, v):
+    """Convert HSV (0-1 floats) to (R, G, B) 0-255 tuple."""
+    if s == 0:
+        iv = int(v * 255)
+        return (iv, iv, iv)
+    i = int(h * 6.0)
+    f = (h * 6.0) - i
+    p = int(v * (1.0 - s) * 255)
+    q = int(v * (1.0 - s * f) * 255)
+    t = int(v * (1.0 - s * (1.0 - f)) * 255)
+    iv = int(v * 255)
+    i %= 6
+    if i == 0:
+        return (iv, t, p)
+    if i == 1:
+        return (q, iv, p)
+    if i == 2:
+        return (p, iv, t)
+    if i == 3:
+        return (p, q, iv)
+    if i == 4:
+        return (t, p, iv)
+    return (iv, p, q)
+
+
+def _play_wav(player, melody, label, sd_mount, lcd=None, pixel=None):
     """Play melody using WAV note samples from SD card."""
     print("  Playing {} (WAV samples)...".format(label))
     if lcd:
@@ -70,6 +99,8 @@ def _play_wav(player, melody, label, sd_mount, lcd=None):
     voice.level = player.volume
     cur_file = None
     notes_shown = ""
+    note_idx = 0
+    num_notes = len(melody)
 
     try:
         for name, ms in melody:
@@ -79,8 +110,12 @@ def _play_wav(player, melody, label, sd_mount, lcd=None):
                 cur_file = None
 
             if name is None:
+                if pixel:
+                    pixel[0] = (0, 0, 0)
                 time.sleep(ms / 1000)
             else:
+                if pixel:
+                    pixel[0] = _hsv_to_rgb(note_idx / num_notes, 1.0, 1.0)
                 if lcd:
                     notes_shown = _scroll_note(lcd, notes_shown, name)
                 path = "{}/{}.wav".format(sd_mount, name)
@@ -88,9 +123,12 @@ def _play_wav(player, melody, label, sd_mount, lcd=None):
                 wav = audiocore.WaveFile(cur_file)
                 voice.play(wav)
                 time.sleep(ms / 1000)
+            note_idx += 1
     except KeyboardInterrupt:
         pass
 
+    if pixel:
+        pixel[0] = (0, 0, 0)
     voice.stop()
     if cur_file is not None:
         cur_file.close()
@@ -110,7 +148,7 @@ def _scroll_note(lcd, notes_shown, name):
     return notes_shown
 
 
-def _play_synth(player, melody, label, lcd=None):
+def _play_synth(player, melody, label, lcd=None, pixel=None):
     """Fallback: play melody using synthio (no SD card needed)."""
     import synthio
 
@@ -132,6 +170,8 @@ def _play_synth(player, melody, label, lcd=None):
 
     prev_note = None
     notes_shown = ""
+    note_idx = 0
+    num_notes = len(melody)
     try:
         for name, ms in melody:
             if prev_note is not None:
@@ -139,8 +179,12 @@ def _play_synth(player, melody, label, lcd=None):
                 prev_note = None
 
             if name is None:
+                if pixel:
+                    pixel[0] = (0, 0, 0)
                 time.sleep(ms / 1000)
             else:
+                if pixel:
+                    pixel[0] = _hsv_to_rgb(note_idx / num_notes, 1.0, 1.0)
                 if lcd:
                     notes_shown = _scroll_note(lcd, notes_shown, name)
                 note = synthio.Note(
@@ -150,9 +194,12 @@ def _play_synth(player, melody, label, lcd=None):
                 synth.press(note)
                 prev_note = note
                 time.sleep(ms / 1000)
+            note_idx += 1
     except KeyboardInterrupt:
         pass
 
+    if pixel:
+        pixel[0] = (0, 0, 0)
     if prev_note is not None:
         synth.release(prev_note)
     time.sleep(0.15)

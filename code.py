@@ -81,7 +81,36 @@ def show_list(wavs):
     print()
 
 
-def sensor_mode(cfg, wavs, player, lcd=None):
+def _hsv_to_rgb(h, s, v):
+    """Convert HSV (0-1 floats) to (R, G, B) 0-255 tuple."""
+    if s == 0:
+        iv = int(v * 255)
+        return (iv, iv, iv)
+    i = int(h * 6.0)
+    f = (h * 6.0) - i
+    p = int(v * (1.0 - s) * 255)
+    q = int(v * (1.0 - s * f) * 255)
+    t = int(v * (1.0 - s * (1.0 - f)) * 255)
+    iv = int(v * 255)
+    i %= 6
+    if i == 0:
+        return (iv, t, p)
+    if i == 1:
+        return (q, iv, p)
+    if i == 2:
+        return (p, iv, t)
+    if i == 3:
+        return (p, q, iv)
+    if i == 4:
+        return (t, p, iv)
+    return (iv, p, q)
+
+
+# Pre-compute a unique colour per mux channel (hue wheel, 16 steps)
+CHANNEL_COLORS = [_hsv_to_rgb(ch / 16.0, 1.0, 1.0) for ch in range(16)]
+
+
+def sensor_mode(cfg, wavs, player, lcd=None, pixel=None):
     cooldown = cfg.get("cooldown_ms", 200)
 
     # Build mux channel -> WAV mapping from config
@@ -97,6 +126,11 @@ def sensor_mode(cfg, wavs, player, lcd=None):
                     break
 
     sensor = MuxSensor(cooldown_ms=cooldown)  # scan all 16 channels
+    fade_until = 0  # monotonic_ns deadline for LED off
+
+    # Show sensor mode on LCD
+    if lcd:
+        lcd.show("Sensor mode", "Ready")
 
     # Status banner
     print()
@@ -116,8 +150,14 @@ def sensor_mode(cfg, wavs, player, lcd=None):
 
     try:
         while True:
+            now_ns = time.monotonic_ns()
             hits = sensor.check()
             for ch in hits:
+                # Flash NeoPixel with channel colour
+                if pixel:
+                    pixel[0] = CHANNEL_COLORS[ch]
+                    fade_until = now_ns + 150_000_000  # 150ms
+
                 if ch in channel_wav:
                     wav_path, wav_name = channel_wav[ch]
                     v = player.play_wav(wav_path)
@@ -133,6 +173,12 @@ def sensor_mode(cfg, wavs, player, lcd=None):
                     if lcd:
                         lcd.show("ch{}".format(ch),
                                  "Hit #{}".format(sensor.count))
+
+            # Fade LED off after timeout
+            if pixel and fade_until and now_ns >= fade_until:
+                pixel[0] = (0, 0, 0)
+                fade_until = 0
+
             time.sleep(0.01)
     except KeyboardInterrupt:
         print()
@@ -140,6 +186,8 @@ def sensor_mode(cfg, wavs, player, lcd=None):
         print("  Exited sensor mode. {} hit(s).".format(sensor.count))
         print()
     finally:
+        if pixel:
+            pixel[0] = (0, 0, 0)
         sensor.deinit()
 
 
@@ -150,12 +198,12 @@ def main():
     print("  CircuitPython  |  Polyphonic")
     print("=" * 44)
 
-    # 0. Turn off SEENGREAT RGB LED (GP22)
+    # 0. NeoPixel on GP22 (used for melody + hit feedback)
+    pixel = None
     try:
         import neopixel
-        _px = neopixel.NeoPixel(board.GP22, 1, brightness=0, auto_write=True)
-        _px[0] = (0, 0, 0)
-        _px.deinit()
+        pixel = neopixel.NeoPixel(board.GP22, 1, brightness=0.3, auto_write=True)
+        pixel[0] = (0, 0, 0)
     except Exception:
         pass
 
@@ -205,9 +253,10 @@ def main():
     if "volume" in cfg:
         player.set_volume_int(cfg["volume"])
 
-    # 4. Startup jingle
+    # 4. Startup jingle (2x speed)
     print()
-    play_tetris(player, MOUNT if sd_ok else None, lcd=display)
+    play_tetris(player, MOUNT if sd_ok else None, lcd=display, speed=2.0,
+                pixel=pixel)
 
     # 5. Scan for WAV files
     wavs = []
@@ -220,8 +269,9 @@ def main():
         else:
             print("Found {} WAV file(s).".format(len(wavs)))
 
-    # 6. Interactive loop
+    # 6. Go straight into sensor mode, then fall through to interactive loop
     if wavs:
+        sensor_mode(cfg, wavs, player, lcd=display, pixel=pixel)
         show_list(wavs)
 
     while True:
@@ -247,7 +297,7 @@ def main():
             continue
 
         if ch == "s":
-            sensor_mode(cfg, wavs, player, lcd=display)
+            sensor_mode(cfg, wavs, player, lcd=display, pixel=pixel)
             continue
 
         if ch == "+":
