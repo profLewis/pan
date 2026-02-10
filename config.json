@@ -1,5 +1,9 @@
 {
-    "hit_wav": "hit.wav",
     "volume": 7,
-    "cooldown_ms": 150
+    "cooldown_ms": 200,
+    "buttons": [
+        {"channel": 0, "wav": "C5.wav"},
+        {"channel": 1, "wav": "E5.wav"},
+        {"channel": 2, "wav": "G5.wav"}
+    ]
 }

@@ -35,40 +35,6 @@ TETRIS_THEME = [
     ("A4", _Q),
 ]
 
-# In the Mood (Glenn Miller, 1939) — opening sax riff
-# Swing shuffle at ~160 BPM. The riff is built on the A-C-E arpeggio.
-# Rhythm: swing pairs (long-short) climbing up, then a held note.
-_SL = 250   # swing long
-_SS = 150   # swing short
-
-IN_THE_MOOD = [
-    # Bar 1: A-C-E climbing riff (the iconic opening)
-    ("A4", _SL), ("C5", _SS), ("E5", _SL), ("C5", _SS),
-    ("E5", _SL), ("E5", _SS), ("E5", _Q),
-    (None, _E),
-    # Bar 2: repeat the riff
-    ("A4", _SL), ("C5", _SS), ("E5", _SL), ("C5", _SS),
-    ("E5", _SL), ("E5", _SS), ("E5", _Q),
-    (None, _E),
-    # Bar 3: same riff, resolve up to G
-    ("A4", _SL), ("C5", _SS), ("E5", _SL), ("C5", _SS),
-    ("E5", _SL), ("G5", _SS), ("G5", _Q),
-    (None, _E),
-    # Bar 4: down and resolve
-    ("G5", _SL), ("E5", _SS), ("C5", _SL), ("A4", _SS),
-    ("A4", _DQ),
-    (None, _Q),
-    # Bar 5-6: second phrase — up to the high A
-    ("A4", _SL), ("C5", _SS), ("E5", _SL), ("G5", _SS),
-    ("A5", _Q), ("G5", _E),
-    ("E5", _SL), ("C5", _SS), ("A4", _Q),
-    (None, _E),
-    # Ending: quick ascending run + final hit
-    ("A4", _S), ("B4", _S), ("C5", _S), ("E5", _S),
-    ("G5", _E), ("A5", _Q),
-    (None, _E),
-]
-
 # Note frequencies for synthio fallback
 FREQ = {
     "A4": 440, "As4": 466, "B4": 494,
@@ -92,11 +58,6 @@ def play_melody(player, melody, label, sd_mount="/sd", lcd=None):
 def play_tetris(player, sd_mount="/sd", lcd=None):
     """Play Tetris using WAV samples if available, else synthio."""
     play_melody(player, TETRIS_THEME, "Tetris", sd_mount, lcd)
-
-
-def play_in_the_mood(player, sd_mount="/sd", lcd=None):
-    """Play In the Mood using WAV samples if available, else synthio."""
-    play_melody(player, IN_THE_MOOD, "In the Mood", sd_mount, lcd)
 
 
 def _play_wav(player, melody, label, sd_mount, lcd=None):

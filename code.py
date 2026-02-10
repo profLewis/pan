@@ -5,7 +5,7 @@ CircuitPython version — polyphonic WAV playback via audiomixer.
 SD card (SPI1): GP10-GP12, CS=GP15
 Audio PWM:      GP18 (L/buzzer), GP19 (R/jack)
 I2C bus (I2C0): GP0 (SDA), GP1 (SCL) — LCD
-Sensor:         GP2  (digital hit, 10K pull-down)
+Mux (CD74HC4067): GP2-GP5 (S0-S3), GP6 (SIG)
 """
 
 import board
@@ -17,8 +17,8 @@ import json
 import time
 
 from audio_player import AudioPlayer
-from melody import play_tetris, play_in_the_mood
-from sensor import HitSensor
+from melody import play_tetris
+from sensor import MuxSensor
 
 MOUNT = "/sd"
 
@@ -81,47 +81,52 @@ def show_list(wavs):
     print()
 
 
-def resolve_hit_wav(cfg, wavs):
-    hit_name = cfg.get("hit_wav")
-    if not hit_name:
-        return None
-    for w in wavs:
-        if w.endswith("/" + hit_name) or w == MOUNT + "/" + hit_name:
-            return w, hit_name
-    print("  WARNING: hit_wav '{}' not found on SD card.".format(hit_name))
-    return None
-
-
 def sensor_mode(cfg, wavs, player):
-    cooldown = cfg.get("cooldown_ms", 2000)
+    cooldown = cfg.get("cooldown_ms", 200)
 
-    result = resolve_hit_wav(cfg, wavs)
-    if result is None:
-        print("  Set \"hit_wav\" in config.json to a WAV filename.")
+    # Build mux channel -> WAV mapping from config
+    buttons_cfg = cfg.get("buttons", [])
+    channel_wav = {}
+    for btn in buttons_cfg:
+        ch = btn.get("channel", 0)
+        wav_name = btn.get("wav")
+        if wav_name:
+            for w in wavs:
+                if w.endswith("/" + wav_name) or w == MOUNT + "/" + wav_name:
+                    channel_wav[ch] = (w, wav_name)
+                    break
+
+    if not channel_wav:
+        print("  No WAV files matched for mux channels.")
+        print("  Configure 'buttons' in config.json:")
+        print('  [{"channel": 0, "wav": "C5.wav"}, ...]')
         show_list(wavs)
         return
-    wav_path, wav_display = result
-    sensor = HitSensor(cooldown_ms=cooldown)
+
+    sensor = MuxSensor(cooldown_ms=cooldown)
 
     # Status banner
     print()
     print("-" * 44)
-    print("  SENSOR MODE (polyphonic)")
-    print("  WAV:      {}".format(wav_display))
+    print("  SENSOR MODE (mux, polyphonic)")
+    for ch in sorted(channel_wav):
+        print("  ch {:>2} -> {}".format(ch, channel_wav[ch][1]))
     print("  Volume:   {}/10".format(player.volume_int()))
     print("  Cooldown: {}ms".format(cooldown))
     print("  Voices:   {} available".format(4))
     print("-" * 44)
-    print("  Waiting for hits... Ctrl+C to exit.")
+    print("  Waiting for presses... Ctrl+C to exit.")
     print()
 
     try:
         while True:
             hits = sensor.check()
-            if hits:
-                v = player.play_wav(wav_path)
-                print("  * HIT #{} (voice {}) - {}".format(
-                    sensor.count, v, wav_display))
+            for ch in hits:
+                if ch in channel_wav:
+                    wav_path, wav_name = channel_wav[ch]
+                    v = player.play_wav(wav_path)
+                    print("  * HIT #{} ch{} (voice {}) - {}".format(
+                        sensor.count, ch, v, wav_name))
             time.sleep(0.01)
     except KeyboardInterrupt:
         print()
@@ -194,15 +199,9 @@ def main():
     if "volume" in cfg:
         player.set_volume_int(cfg["volume"])
 
-    # 4. Startup jingle — alternate between Tetris and In the Mood
-    import microcontroller
-    boot_count = microcontroller.nvm[0]
-    microcontroller.nvm[0] = (boot_count + 1) % 256
+    # 4. Startup jingle
     print()
-    if boot_count % 2 == 0:
-        play_tetris(player, MOUNT if sd_ok else None, lcd=display)
-    else:
-        play_in_the_mood(player, MOUNT if sd_ok else None, lcd=display)
+    play_tetris(player, MOUNT if sd_ok else None, lcd=display)
 
     # 5. Scan for WAV files
     wavs = []
