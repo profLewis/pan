@@ -13,9 +13,6 @@
         {"channel": 8, "wav": "Fs4.wav"},
         {"channel": 9, "wav": "A4.wav"},
         {"channel": 10, "wav": "G4.wav"},
-        {"channel": 11, "wav": "Gs4.wav"},
-        {"channel": 12, "wav": "C5.wav"},
-        {"channel": 13, "wav": "Cs5.wav"},
-        {"channel": 14, "wav": "D5.wav"}
+        {"channel": 11, "wav": "Gs4.wav"}
     ]
 }

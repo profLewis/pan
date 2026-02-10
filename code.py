@@ -103,7 +103,7 @@ def sensor_mode(cfg, wavs, player):
         show_list(wavs)
         return
 
-    sensor = MuxSensor(cooldown_ms=cooldown)
+    sensor = MuxSensor(channels=sorted(channel_wav.keys()), cooldown_ms=cooldown)
 
     # Status banner
     print()

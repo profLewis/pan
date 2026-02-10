@@ -18,12 +18,14 @@ import time
 
 
 class MuxSensor:
-    def __init__(self, select_pins=None, sig_pin=None, channels=16,
+    def __init__(self, select_pins=None, sig_pin=None, channels=None,
                  cooldown_ms=200):
         if select_pins is None:
             select_pins = [board.GP2, board.GP3, board.GP4, board.GP5]
         if sig_pin is None:
             sig_pin = board.GP6
+        if channels is None:
+            channels = list(range(16))
 
         # Set up select pins as outputs
         self._sel = []
@@ -40,7 +42,9 @@ class MuxSensor:
 
         self._channels = channels
         self.cooldown = cooldown_ms
-        self._last = [0] * channels
+        self._last = {}
+        for ch in channels:
+            self._last[ch] = 0
         self.count = 0
 
     def _select(self, ch):
@@ -49,10 +53,10 @@ class MuxSensor:
             pin.value = bool(ch & (1 << i))
 
     def check(self):
-        """Scan all channels, return list of newly pressed channel IDs."""
+        """Scan configured channels, return list of newly pressed channel IDs."""
         now = time.monotonic_ns() // 1_000_000
         triggered = []
-        for ch in range(self._channels):
+        for ch in self._channels:
             self._select(ch)
             # Small settle time for mux (~1us needed, sleep(0) is fine)
             if self._sig.value and now - self._last[ch] >= self.cooldown:
@@ -63,7 +67,8 @@ class MuxSensor:
 
     def reset(self):
         self.count = 0
-        self._last = [0] * self._channels
+        for ch in self._channels:
+            self._last[ch] = 0
 
     def deinit(self):
         for pin in self._sel:
