@@ -125,7 +125,7 @@ def sensor_mode(cfg, wavs, player, lcd=None, pixel=None):
                     channel_wav[ch] = (w, wav_name)
                     break
 
-    sensor = MuxSensor(channels=[0, 1, 2, 3], cooldown_ms=cooldown)
+    sensor = MuxSensor(cooldown_ms=cooldown)  # scan all 16 channels
     fade_until = 0  # monotonic_ns deadline for LED off
 
     # Show sensor mode on LCD
