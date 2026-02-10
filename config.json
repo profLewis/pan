@@ -2,8 +2,20 @@
     "volume": 7,
     "cooldown_ms": 200,
     "buttons": [
-        {"channel": 0, "wav": "C5.wav"},
-        {"channel": 1, "wav": "E5.wav"},
-        {"channel": 2, "wav": "G5.wav"}
+        {"channel": 0, "wav": "D4.wav"},
+        {"channel": 1, "wav": "Cs4.wav"},
+        {"channel": 2, "wav": "Ds4.wav"},
+        {"channel": 3, "wav": "C4.wav"},
+        {"channel": 4, "wav": "E4.wav"},
+        {"channel": 5, "wav": "B4.wav"},
+        {"channel": 6, "wav": "F4.wav"},
+        {"channel": 7, "wav": "As4.wav"},
+        {"channel": 8, "wav": "Fs4.wav"},
+        {"channel": 9, "wav": "A4.wav"},
+        {"channel": 10, "wav": "G4.wav"},
+        {"channel": 11, "wav": "Gs4.wav"},
+        {"channel": 12, "wav": "C5.wav"},
+        {"channel": 13, "wav": "Cs5.wav"},
+        {"channel": 14, "wav": "D5.wav"}
     ]
 }
