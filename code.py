@@ -5,7 +5,7 @@ CircuitPython version — polyphonic WAV playback via audiomixer.
 SD card (SPI1): GP10-GP12, CS=GP15
 Audio PWM:      GP18 (L/buzzer), GP19 (R/jack)
 I2C bus (I2C0): GP0 (SDA), GP1 (SCL) — LCD
-Mux (CD74HC4067): GP2-GP5 (S0-S3), GP6 (SIG)
+Mux (CD74HC4067): GP2-GP5 (S0-S3), GP9 (SIG)
 """
 
 import board
@@ -81,7 +81,7 @@ def show_list(wavs):
     print()
 
 
-def sensor_mode(cfg, wavs, player):
+def sensor_mode(cfg, wavs, player, lcd=None):
     cooldown = cfg.get("cooldown_ms", 200)
 
     # Build mux channel -> WAV mapping from config
@@ -96,26 +96,22 @@ def sensor_mode(cfg, wavs, player):
                     channel_wav[ch] = (w, wav_name)
                     break
 
-    if not channel_wav:
-        print("  No WAV files matched for mux channels.")
-        print("  Configure 'buttons' in config.json:")
-        print('  [{"channel": 0, "wav": "C5.wav"}, ...]')
-        show_list(wavs)
-        return
-
-    sensor = MuxSensor(channels=sorted(channel_wav.keys()), cooldown_ms=cooldown)
+    sensor = MuxSensor(cooldown_ms=cooldown)  # scan all 16 channels
 
     # Status banner
     print()
     print("-" * 44)
-    print("  SENSOR MODE (mux, polyphonic)")
-    for ch in sorted(channel_wav):
-        print("  ch {:>2} -> {}".format(ch, channel_wav[ch][1]))
+    print("  SENSOR MODE (mux 16ch, polyphonic)")
+    if channel_wav:
+        for ch in sorted(channel_wav):
+            print("  ch {:>2} -> {}".format(ch, channel_wav[ch][1]))
+    else:
+        print("  No WAV mappings (raw scan only)")
     print("  Volume:   {}/10".format(player.volume_int()))
     print("  Cooldown: {}ms".format(cooldown))
     print("  Voices:   {} available".format(4))
     print("-" * 44)
-    print("  Waiting for presses... Ctrl+C to exit.")
+    print("  Scanning all 16 channels... Ctrl+C to exit.")
     print()
 
     try:
@@ -125,8 +121,18 @@ def sensor_mode(cfg, wavs, player):
                 if ch in channel_wav:
                     wav_path, wav_name = channel_wav[ch]
                     v = player.play_wav(wav_path)
+                    note = wav_name.replace(".wav", "")
                     print("  * HIT #{} ch{} (voice {}) - {}".format(
                         sensor.count, ch, v, wav_name))
+                    if lcd:
+                        lcd.show("ch{} = {}".format(ch, note),
+                                 "Hit #{}".format(sensor.count))
+                else:
+                    print("  * HIT #{} ch{} (no wav)".format(
+                        sensor.count, ch))
+                    if lcd:
+                        lcd.show("ch{}".format(ch),
+                                 "Hit #{}".format(sensor.count))
             time.sleep(0.01)
     except KeyboardInterrupt:
         print()
@@ -241,7 +247,7 @@ def main():
             continue
 
         if ch == "s":
-            sensor_mode(cfg, wavs, player)
+            sensor_mode(cfg, wavs, player, lcd=display)
             continue
 
         if ch == "+":
